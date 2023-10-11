@@ -11,9 +11,9 @@ class Message(BaseModel):
     messages: list
 
 @app.get("/webhook")
-async def verify_webhook(hub_mode: str, hub_challenge: int, hub_verify_token: str):
+async def verify_webhook(hub_mode: str, hub_challenge: str, hub_verify_token: str):
     if hub_verify_token == VERIFY_TOKEN:
-        return {"hub.challenge": hub_challenge}
+        return {"hub.challenge": int(hub_challenge)}
     else:
         raise HTTPException(status_code=403, detail="Token de verificação incorreto")
 
