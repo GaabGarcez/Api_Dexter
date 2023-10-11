@@ -9,7 +9,7 @@ class Message(BaseModel):
 
 @app.get("/webhook")
 async def verify_webhook(hub_mode: str, hub_challenge: str, hub_verify_token: str):
-    VERIFY_TOKEN = "YOUR_VERIFY_TOKEN"  # Defina seu token de verificação aqui
+    VERIFY_TOKEN = "EABjyeHmZA4e4BOzjLT0U0AgVRSyTt7P1qcQMT2IoTGCFdqHQP4sNYLnPyf8NmXBCJNIvJ6VMeDTpEGejNaUO5iFsa3ZAOtSLx0EhUHHuPOh6zTke6mUNZAoPeYQ8MYHyx5Pu8OGRDMZB4lo5y6m2oy8nno6lPk688XmuYLCHMB5DO34Ow2v3lqcUMBa28IVW"  # Defina seu token de verificação aqui
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
         return {"hub.challenge": hub_challenge}
     else:
