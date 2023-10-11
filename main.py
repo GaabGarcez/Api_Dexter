@@ -2,6 +2,8 @@ from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
 import os
 import httpx
+from fastapi.responses import PlainTextResponse
+
 
 app = FastAPI()
 
@@ -15,7 +17,7 @@ class WebhookPayload(BaseModel):
 @app.get("/webhook")
 async def verify_webhook(hub_mode: str, hub_verify_token: str, hub_challenge: str):
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
-        return hub_challenge  # Respondendo com o valor de hub.challenge como uma string simples
+        return PlainTextResponse(hub_challenge)  # Respondendo explicitamente com uma resposta de texto
     else:
         raise HTTPException(status_code=403, detail="Tokens do not match")
 
