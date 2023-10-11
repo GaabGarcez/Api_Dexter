@@ -1,25 +1,28 @@
 from fastapi import FastAPI, Request, HTTPException
+from typing import Optional
 
 app = FastAPI()
 
-VERIFY_TOKEN = "EABjyeHmZA4e4BO1wyFvCEcPuOQM1CMp5sVj9fDWezucyJBhOzpdpcAPHW8WZCHN3OfZCPu5G1cHFNZCx61iiB3Y2wYDU6YKCeVViR7nkfgfFavXEZC7x3SDGgfTq5S0fgZAz3aRnkplnIUD2v5wELyEec3K15YP7DX5htPtV19Rn7ZCNLK3D5otFsZBFVDJbjZBfnSKydjEL7tdvz5oxKX3jw8VmybacZD"
-
-@app.post("/webhook")
-async def webhook(request: Request):
-    data = await request.json()
-    # Processar a notificação do evento aqui
-    return {"status": "success"}
+VERIFY_TOKEN = "EABjyeHmZA4e4BOzjLT0U0AgVRSyTt7P1qcQMT2IoTGCFdqHQP4sNYLnPyf8NmXBCJNIvJ6VMeDTpEGejNaUO5iFsa3ZAOtSLx0EhUHHuPOh6zTke6mUNZAoPeYQ8MYHyx5Pu8OGRDMZB4lo5y6m2oy8nno6lPk688XmuYLCHMB5DO34Ow2v3lqcUMBa28IVW"  # Substitua por seu token de verificação
 
 @app.get("/webhook")
 async def verify(request: Request):
+    # Obter parâmetros da string de consulta
     mode = request.query_params.get("hub.mode")
     token = request.query_params.get("hub.verify_token")
     challenge = request.query_params.get("hub.challenge")
 
+    # Verificar se o token de verificação corresponde
     if mode and token:
         if mode == "subscribe" and token == VERIFY_TOKEN:
             return {"hub.challenge": challenge}
         else:
-            raise HTTPException(status_code=403, detail="Forbidden")
+            raise HTTPException(status_code=403, detail="Token de verificação não corresponde")
     else:
-        raise HTTPException(status_code=400, detail="Bad Request")
+        raise HTTPException(status_code=403, detail="Parâmetros ausentes")
+
+@app.post("/webhook")
+async def handle_webhook(request: Request):
+    # Aqui, você pode processar o payload da notificação de evento
+    # Por enquanto, apenas respondemos com um 200 OK
+    return {"status": "received"}
