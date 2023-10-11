@@ -5,8 +5,8 @@ import httpx
 
 app = FastAPI()
 
-os.environ['VERIFY_TOKEN'] = "27032001"
-os.environ['WHATSAPP_TOKEN'] = "EABjyeHmZA4e4BOzjLT0U0AgVRSyTt7P1qcQMT2IoTGCFdqHQP4sNYLnPyf8NmXBCJNIvJ6VMeDTpEGejNaUO5iFsa3ZAOtSLx0EhUHHuPOh6zTke6mUNZAoPeYQ8MYHyx5Pu8OGRDMZB4lo5y6m2oy8nno6lPk688XmuYLCHMB5DO34Ow2v3lqcUMBa28IVW"
+VERIFY_TOKEN = os.environ.get('VERIFY_TOKEN', "27032001")
+WHATSAPP_TOKEN = os.environ.get('WHATSAPP_TOKEN', "EABjyeHmZA4e4BOzjLT0U0AgVRSyTt7P1qcQMT2IoTGCFdqHQP4sNYLnPyf8NmXBCJNIvJ6VMeDTpEGejNaUO5iFsa3ZAOtSLx0EhUHHuPOh6zTke6mUNZAoPeYQ8MYHyx5Pu8OGRDMZB4lo5y6m2oy8nno6lPk688XmuYLCHMB5DO34Ow2v3lqcUMBa28IVW")
 
 class WebhookPayload(BaseModel):
     object: str
@@ -14,8 +14,8 @@ class WebhookPayload(BaseModel):
 
 @app.get("/webhook")
 async def verify_webhook(hub_mode: str, hub_verify_token: str, hub_challenge: str):
-    if hub_mode == "subscribe" and hub_verify_token == os.environ['VERIFY_TOKEN']:
-        return {"hub.challenge": hub_challenge}
+    if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
+        return hub_challenge  # Respondendo com o valor de hub.challenge como uma string simples
     else:
         raise HTTPException(status_code=403, detail="Tokens do not match")
 
@@ -30,7 +30,7 @@ async def handle_webhook(data: WebhookPayload):
                 from_number = change["value"]["messages"][0]["from"]
                 msg_body = change["value"]["messages"][0]["text"]["body"]
                 
-                url = f"https://graph.facebook.com/v12.0/{phone_number_id}/messages?access_token={os.environ['WHATSAPP_TOKEN']}"
+                url = f"https://graph.facebook.com/v12.0/{phone_number_id}/messages?access_token={WHATSAPP_TOKEN}"
                 payload = {
                     "messaging_product": "whatsapp",
                     "to": from_number,
@@ -39,6 +39,8 @@ async def handle_webhook(data: WebhookPayload):
                 
                 async with httpx.AsyncClient() as client:
                     response = await client.post(url, json=payload)
+                    if response.status_code != 200:
+                        raise HTTPException(status_code=response.status_code, detail=response.text)
                 
                 return {"status": "message sent"}
-    return {"status": "not a valid request"}
+    raise HTTPException(status_code=400, detail="Not a valid request")
