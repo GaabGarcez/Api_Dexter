@@ -1,48 +1,66 @@
-from fastapi import FastAPI, Request, HTTPException
-from pydantic import BaseModel
-import os
-import httpx
-from fastapi.responses import PlainTextResponse
-
+from fastapi import FastAPI, Request, HTTPException, Depends
+from typing import Optional
+import requests
+import json
 
 app = FastAPI()
 
-VERIFY_TOKEN = os.environ.get('VERIFY_TOKEN', "27032001")
-WHATSAPP_TOKEN = os.environ.get('WHATSAPP_TOKEN', "EABjyeHmZA4e4BOzjLT0U0AgVRSyTt7P1qcQMT2IoTGCFdqHQP4sNYLnPyf8NmXBCJNIvJ6VMeDTpEGejNaUO5iFsa3ZAOtSLx0EhUHHuPOh6zTke6mUNZAoPeYQ8MYHyx5Pu8OGRDMZB4lo5y6m2oy8nno6lPk688XmuYLCHMB5DO34Ow2v3lqcUMBa28IVW")
+# Tokens (ajuste conforme necessário)
+WHATSAPP_TOKEN = "EABjyeHmZA4e4BOzjLT0U0AgVRSyTt7P1qcQMT2IoTGCFdqHQP4sNYLnPyf8NmXBCJNIvJ6VMeDTpEGejNaUO5iFsa3ZAOtSLx0EhUHHuPOh6zTke6mUNZAoPeYQ8MYHyx5Pu8OGRDMZB4lo5y6m2oy8nno6lPk688XmuYLCHMB5DO34Ow2v3lqcUMBa28IVW"
+VERIFY_TOKEN = "ZEUX"
 
-class WebhookPayload(BaseModel):
-    object: str
-    entry: list
 
-@app.get("/webhook")
-async def verify_webhook(hub_mode: str, hub_verify_token: str, hub_challenge: str):
-    if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
-        return PlainTextResponse(hub_challenge)  # Respondendo explicitamente com uma resposta de texto
+@app.post("/webhook/")
+async def webhook(request: Request):
+    body = await request.json()
+
+    # Verifique a mensagem do webhook recebida
+    print(json.dumps(body, indent=2))
+
+    if "object" in body:
+        entry = body.get("entry", [{}])[0]
+        changes = entry.get("changes", [{}])[0]
+        value = changes.get("value", {})
+        messages = value.get("messages", [{}])[0]
+
+        if all([
+            entry,
+            changes,
+            value,
+            messages
+        ]):
+            phone_number_id = value.get("metadata", {}).get("phone_number_id")
+            from_number = messages.get("from")
+            msg_body = messages.get("text", {}).get("body")
+
+            url = f"https://graph.facebook.com/v12.0/{phone_number_id}/messages?access_token={WHATSAPP_TOKEN}"
+            data = {
+                "messaging_product": "whatsapp",
+                "to": from_number,
+                "text": {"body": "Ack: " + msg_body}
+            }
+            headers = {"Content-Type": "application/json"}
+
+            requests.post(url, json=data, headers=headers)
+
+            return {"status": "success"}
+        else:
+            raise HTTPException(status_code=404, detail="Not Found")
     else:
-        raise HTTPException(status_code=403, detail="Tokens do not match")
+        raise HTTPException(status_code=404, detail="Not Found")
 
-@app.post("/webhook")
-async def handle_webhook(data: WebhookPayload):
-    if data.object:
-        entry = data.entry[0]
-        if entry.get("changes"):
-            change = entry["changes"][0]
-            if change.get("value") and change["value"].get("messages"):
-                phone_number_id = change["value"]["metadata"]["phone_number_id"]
-                from_number = change["value"]["messages"][0]["from"]
-                msg_body = change["value"]["messages"][0]["text"]["body"]
-                
-                url = f"https://graph.facebook.com/v12.0/{phone_number_id}/messages?access_token={WHATSAPP_TOKEN}"
-                payload = {
-                    "messaging_product": "whatsapp",
-                    "to": from_number,
-                    "text": {"body": "Ack: " + msg_body}
-                }
-                
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(url, json=payload)
-                    if response.status_code != 200:
-                        raise HTTPException(status_code=response.status_code, detail=response.text)
-                
-                return {"status": "message sent"}
-    raise HTTPException(status_code=400, detail="Not a valid request")
+
+@app.get("/webhook/")
+def verify_webhook(mode: str, token: str, challenge: str):
+    if mode and token:
+        if mode == "subscribe" and token == VERIFY_TOKEN:
+            return {"challenge": challenge}
+        else:
+            raise HTTPException(status_code=403, detail="Forbidden")
+    else:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
