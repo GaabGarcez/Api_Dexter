@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 app = FastAPI()
 
-VERIFY_TOKEN = "YOUR_VERIFY_TOKEN"  # Substitua pelo seu token de verificação
+VERIFY_TOKEN = "EABjyeHmZA4e4BOzjLT0U0AgVRSyTt7P1qcQMT2IoTGCFdqHQP4sNYLnPyf8NmXBCJNIvJ6VMeDTpEGejNaUO5iFsa3ZAOtSLx0EhUHHuPOh6zTke6mUNZAoPeYQ8MYHyx5Pu8OGRDMZB4lo5y6m2oy8nno6lPk688XmuYLCHMB5DO34Ow2v3lqcUMBa28IVW"  # Substitua pelo seu token de verificação
 
 class WhatsAppMessage(BaseModel):
     from_: str
