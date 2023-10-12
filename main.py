@@ -11,16 +11,20 @@ class Message(BaseModel):
     numero: str
     mensagem: str
 
-@app.websocket("/connect/{uuid}")
-async def websocket_endpoint(websocket: WebSocket, uuid: str):
-    await websocket.accept()
-    connections[uuid] = websocket
+async def handle_websocket_messages(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
             # Aqui você pode processar a mensagem recebida se necessário
     except:
-        del connections[uuid]
+        pass
+
+@app.websocket("/connect/{uuid}")
+async def websocket_endpoint(websocket: WebSocket, uuid: str):
+    await websocket.accept()
+    connections[uuid] = websocket
+    await handle_websocket_messages(websocket)
+    del connections[uuid]
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
