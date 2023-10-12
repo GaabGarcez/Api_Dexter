@@ -49,12 +49,12 @@ async def read_webhook(message: Message):
     # Verifique se temos uma conexão WebSocket para esse UUID
     if uuid in connections:
         websocket = connections[uuid]
-        # Verifique se o WebSocket ainda está aberto
-        if not websocket.client_disconnected:
+        try:
             await websocket.send_text(message.mensagem)  # Envie a mensagem para o servidor local
             response_message = await websocket.receive_text()  # Aguarde a resposta do servidor local
             return {"response": response_message}
-        else:
+        except Exception as e:
+            # Se ocorrer uma exceção ao tentar enviar/receber uma mensagem, assumimos que a conexão foi fechada
             return {"response": "O dexter não está sendo executado no seu servidor."}
     else:
         return {"response": "O dexter não está sendo executado no seu servidor."}
