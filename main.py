@@ -24,7 +24,8 @@ async def websocket_endpoint(websocket: WebSocket, uuid: str):
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
-    response = requests.post('https://xkit-1dzl-gome.n7c.xano.io/api:fbhumpeF/dexter_validacao', data={"numero": message.numero})
+    response = requests.post('https://xkit-1dzl-gome.n7c.xano.io/api:fbhumpeF/dexter_validacao', data={"numero": message.numero}, verify=False)
+
     data = response.json()
 
     if "Seu número não está cadastrado!" in data:
