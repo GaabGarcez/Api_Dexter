@@ -44,9 +44,9 @@ async def read_webhook(message: Message):
 
     # Verifique se temos uma conexão WebSocket para esse UUID
     if uuid in connections:
-        pending_messages[uuid] = message.mensagem
-        # Aguarde um pouco para dar tempo à coroutine handle_websocket_messages de processar a mensagem
-        await asyncio.sleep(2)
-        return {"response": "Mensagem enviada com sucesso!"}
+        websocket = connections[uuid]
+        await websocket.send_text(message.mensagem)  # Envie a mensagem para o servidor local
+        response_message = await websocket.receive_text()  # Aguarde a resposta do servidor local
+        return {"response": response_message}
     else:
         return {"response": "O dexter não está sendo executado no seu servidor."}
