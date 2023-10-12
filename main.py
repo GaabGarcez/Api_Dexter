@@ -28,8 +28,16 @@ async def handle_websocket_messages(websocket: WebSocket, uuid: str):
 async def websocket_endpoint(websocket: WebSocket, uuid: str):
     await websocket.accept()
     connections[uuid] = websocket
-    await handle_websocket_messages(websocket, uuid)
-    del connections[uuid]
+    try:
+        await handle_websocket_messages(websocket, uuid)
+    except Exception as e:
+        print(f"Erro ao lidar com mensagens WebSocket: {e}")
+    finally:
+        del connections[uuid]
+
+# ... (restante do código)
+
+
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
