@@ -35,10 +35,6 @@ async def websocket_endpoint(websocket: WebSocket, uuid: str):
     finally:
         del connections[uuid]
 
-# ... (restante do código)
-
-
-
 @app.post("/webhook/")
 async def read_webhook(message: Message):
     response = requests.post('https://xkit-1dzl-gome.n7c.xano.io/api:fbhumpeF/dexter_validacao', data={"numero": message.numero}, verify=False)
@@ -53,8 +49,12 @@ async def read_webhook(message: Message):
     # Verifique se temos uma conexão WebSocket para esse UUID
     if uuid in connections:
         websocket = connections[uuid]
-        await websocket.send_text(message.mensagem)  # Envie a mensagem para o servidor local
-        response_message = await websocket.receive_text()  # Aguarde a resposta do servidor local
-        return {"response": response_message}
+        # Verifique se o WebSocket ainda está aberto
+        if not websocket.client_disconnected:
+            await websocket.send_text(message.mensagem)  # Envie a mensagem para o servidor local
+            response_message = await websocket.receive_text()  # Aguarde a resposta do servidor local
+            return {"response": response_message}
+        else:
+            return {"response": "O dexter não está sendo executado no seu servidor."}
     else:
         return {"response": "O dexter não está sendo executado no seu servidor."}
