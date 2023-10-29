@@ -10,7 +10,7 @@ connections = {}
 pending_messages = {}
 
 class Message(BaseModel):
-    numero: str
+    uuid_user: str
     mensagem: str
 
 async def handle_websocket_messages(websocket: WebSocket, uuid: str):
@@ -37,14 +37,9 @@ async def websocket_endpoint(websocket: WebSocket, uuid: str):
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
-    response = requests.post('https://xkit-1dzl-gome.n7c.xano.io/api:fbhumpeF/dexter_validacao', data={"numero": message.numero}, verify=False)
-
-    data = response.json()
-
-    if "Seu número não está cadastrado!" in data:
-        return {"response": "Seu número não está cadastrado!"}
     
-    uuid = data  # O Xano retorna o UUID diretamente
+    
+    uuid = message.uuid_user  # O Xano retorna o UUID diretamente
 
     # Verifique se temos uma conexão WebSocket para esse UUID
     if uuid in connections:
@@ -55,6 +50,6 @@ async def read_webhook(message: Message):
             return {"response": response_message}
         except Exception as e:
             # Se ocorrer uma exceção ao tentar enviar/receber uma mensagem, assumimos que a conexão foi fechada
-            return {"response": "O dexter não está sendo executado no seu servidor."}
+            return {"response": "O Dexter não está sendo executado no seu servidor."}
     else:
-        return {"response": "O dexter não está sendo executado no seu servidor."}
+        return {"response": "O Dexter não está sendo executado no seu servidor."}
