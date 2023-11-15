@@ -2,12 +2,13 @@ from fastapi import FastAPI, WebSocket
 from pydantic import BaseModel
 import asyncio
 from collections import defaultdict
+import uuid
 
 app = FastAPI()
 
 connections = {}
 message_queues = defaultdict(asyncio.Queue)
-response_callbacks = {}  # Usando a abordagem de callback do código antigo
+response_futures = {}  # Usando Futures para gerenciar respostas
 
 class Message(BaseModel):
     uuid_user: str
@@ -17,16 +18,22 @@ async def handle_websocket_messages(websocket: WebSocket, uuid_str: str):
     try:
         while True:
             if not message_queues[uuid_str].empty():
-                message = await message_queues[uuid_str].get()
+                message_id, message = await message_queues[uuid_str].get()
                 await websocket.send_text(message)
-                response = await websocket.receive_text()
-                if uuid_str in response_callbacks:
-                    response_callbacks[uuid_str](response)  # Chama o callback com a resposta
+                response_futures[message_id] = asyncio.Future()
+                response = await asyncio.wait_for(response_futures[message_id], timeout=30)
                 message_queues[uuid_str].task_done()
             else:
                 await asyncio.sleep(0.1)
+    except asyncio.TimeoutError:
+        print(f"Timeout na resposta para UUID {uuid_str}")
     except Exception as e:
         print(f"Erro ao lidar com mensagens WebSocket: {e}")
+
+async def enqueue_message(uuid_str, message):
+    message_id = str(uuid.uuid4())  # Gera um identificador único para a mensagem
+    await message_queues[uuid_str].put((message_id, message))
+    return message_id
 
 @app.websocket("/connect/{uuid}")
 async def websocket_endpoint(websocket: WebSocket, uuid_str: str):
@@ -43,15 +50,12 @@ async def websocket_endpoint(websocket: WebSocket, uuid_str: str):
 async def read_webhook(message: Message):
     uuid_str = message.uuid_user
     if uuid_str in connections:
-        await message_queues[uuid_str].put(message.mensagem)
-        response_future = asyncio.Future()
-        response_callbacks[uuid_str] = response_future.set_result
         try:
-            response = await asyncio.wait_for(response_future, timeout=30)
-            return {"response": response}
+            message_id = await enqueue_message(uuid_str, message.mensagem)
+            return {"response": await asyncio.wait_for(response_futures.pop(message_id, None), timeout=30)}
         except asyncio.TimeoutError:
             return {"response": "Timeout esperando resposta do servidor local."}
-        finally:
-            response_callbacks.pop(uuid_str, None)
+        except Exception as e:
+            return {"response": f"Erro ao processar a mensagem: {e}"}
     else:
         return {"response": "UUID não encontrado ou conexão não estabelecida"}
