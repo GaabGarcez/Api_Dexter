@@ -3,9 +3,8 @@ from pydantic import BaseModel
 import requests
 import asyncio  # Adicionado importação de asyncio
 
+lock = asyncio.Lock()
 app = FastAPI()
-
-# Tabela de associação para mapear UUID para conexão WebSocket e mensagens pendentes
 connections = {}
 pending_messages = {}
 
@@ -16,24 +15,30 @@ class Message(BaseModel):
 async def handle_websocket_messages(websocket: WebSocket, uuid: str):
     try:
         while True:
+            await lock.acquire()
             if uuid in pending_messages:
                 message = pending_messages.pop(uuid)
                 await websocket.send_text(message)
             else:
-                await asyncio.sleep(1)  # Adicione um pequeno atraso para evitar uso excessivo de CPU
+                await asyncio.sleep(1)
+            lock.release()
     except:
         pass
 
+
 @app.websocket("/connect/{uuid}")
 async def websocket_endpoint(websocket: WebSocket, uuid: str):
-    await websocket.accept()
-    connections[uuid] = websocket
+    await lock.acquire()
     try:
+        await websocket.accept()
+        connections[uuid] = websocket
         await handle_websocket_messages(websocket, uuid)
     except Exception as e:
         print(f"Erro ao lidar com mensagens WebSocket: {e}")
     finally:
         del connections[uuid]
+        lock.release()
+
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
