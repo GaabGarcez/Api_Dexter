@@ -1,14 +1,14 @@
 from fastapi import FastAPI, WebSocket
 from pydantic import BaseModel
-import requests
-import asyncio  # Adicionado importação de asyncio
+import asyncio
 from collections import defaultdict
 
-lock = asyncio.Lock()
 app = FastAPI()
+
+# Estruturas para gerenciar conexões, filas de mensagens, e callbacks de respostas
 connections = {}
-pending_messages = {}
 message_queues = defaultdict(asyncio.Queue)
+response_callbacks = {}
 
 class Message(BaseModel):
     uuid_user: str
@@ -20,36 +20,39 @@ async def handle_websocket_messages(websocket: WebSocket, uuid: str):
             if not message_queues[uuid].empty():
                 message = await message_queues[uuid].get()
                 await websocket.send_text(message)
+                response = await websocket.receive_text()
+                if uuid in response_callbacks:
+                    response_callbacks[uuid](response)  # Chama o callback com a resposta
                 message_queues[uuid].task_done()
             else:
-                await asyncio.sleep(0.1)  # Ajuste o tempo de espera conforme necessário
+                await asyncio.sleep(0.1)
     except Exception as e:
         print(f"Erro ao lidar com mensagens WebSocket: {e}")
 
-
-async def enqueue_message(uuid, message):
-    await message_queues[uuid].put(message)
-
-
 @app.websocket("/connect/{uuid}")
 async def websocket_endpoint(websocket: WebSocket, uuid: str):
-    await lock.acquire()
+    await websocket.accept()
+    connections[uuid] = websocket
     try:
-        await websocket.accept()
-        connections[uuid] = websocket
         await handle_websocket_messages(websocket, uuid)
     except Exception as e:
         print(f"Erro ao lidar com mensagens WebSocket: {e}")
     finally:
         del connections[uuid]
-        lock.release()
-
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
     uuid = message.uuid_user
     if uuid in connections:
-        await enqueue_message(uuid, message.mensagem)
-        return {"response": "Mensagem enfileirada com sucesso"}
+        await message_queues[uuid].put(message.mensagem)
+        response_future = asyncio.Future()
+        response_callbacks[uuid] = response_future.set_result
+        try:
+            response = await asyncio.wait_for(response_future, timeout=30)  # Espera a resposta por até 30 segundos
+            return {"response": response}
+        except asyncio.TimeoutError:
+            return {"response": "Timeout esperando resposta do servidor local."}
+        finally:
+            response_callbacks.pop(uuid, None)
     else:
-        return {"response": "UUID não encontrado"}
+        return {"response": "UUID não encontrado."}
