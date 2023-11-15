@@ -2,57 +2,59 @@ from fastapi import FastAPI, WebSocket
 from pydantic import BaseModel
 import asyncio
 from collections import defaultdict
+import uuid
 
 app = FastAPI()
 
-# Estruturas para gerenciar conexões, filas de mensagens, e callbacks de respostas
 connections = {}
 message_queues = defaultdict(asyncio.Queue)
-response_callbacks = {}
+responses = {}
 
 class Message(BaseModel):
     uuid_user: str
     mensagem: str
 
-async def handle_websocket_messages(websocket: WebSocket, uuid: str):
+async def handle_websocket_messages(websocket: WebSocket, uuid_str: str):
     try:
         while True:
-            if not message_queues[uuid].empty():
-                message = await message_queues[uuid].get()
+            if not message_queues[uuid_str].empty():
+                message_id, message = await message_queues[uuid_str].get()
                 await websocket.send_text(message)
                 response = await websocket.receive_text()
-                if uuid in response_callbacks:
-                    response_callbacks[uuid](response)  # Chama o callback com a resposta
-                message_queues[uuid].task_done()
+                responses[message_id] = response
+                message_queues[uuid_str].task_done()
             else:
                 await asyncio.sleep(0.1)
     except Exception as e:
         print(f"Erro ao lidar com mensagens WebSocket: {e}")
 
+async def enqueue_message(uuid_str, message):
+    message_id = str(uuid.uuid4())  # Gera um identificador único para a mensagem
+    await message_queues[uuid_str].put((message_id, message))
+    return message_id
+
 @app.websocket("/connect/{uuid}")
-async def websocket_endpoint(websocket: WebSocket, uuid: str):
+async def websocket_endpoint(websocket: WebSocket, uuid_str: str):
     await websocket.accept()
-    connections[uuid] = websocket
+    connections[uuid_str] = websocket
     try:
-        await handle_websocket_messages(websocket, uuid)
+        await handle_websocket_messages(websocket, uuid_str)
     except Exception as e:
         print(f"Erro ao lidar com mensagens WebSocket: {e}")
     finally:
-        del connections[uuid]
+        del connections[uuid_str]
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
-    uuid = message.uuid_user
-    if uuid in connections:
-        await message_queues[uuid].put(message.mensagem)
-        response_future = asyncio.Future()
-        response_callbacks[uuid] = response_future.set_result
+    uuid_str = message.uuid_user
+    if uuid_str in connections:
         try:
-            response = await asyncio.wait_for(response_future, timeout=30)  # Espera a resposta por até 30 segundos
-            return {"response": response}
-        except asyncio.TimeoutError:
-            return {"response": "Timeout esperando resposta do servidor local."}
-        finally:
-            response_callbacks.pop(uuid, None)
+            message_id = await enqueue_message(uuid_str, message.mensagem)
+            # Aguardar aqui pela resposta e retorná-la
+            while message_id not in responses:
+                await asyncio.sleep(0.1)  # Ajuste o tempo de espera conforme necessário
+            return {"response": responses.pop(message_id)}
+        except Exception as e:
+            return {"response": f"Erro ao processar a mensagem: {e}"}
     else:
-        return {"response": "UUID não encontrado."}
+        return {"response": "UUID não encontrado ou conexão não estabelecida"}
