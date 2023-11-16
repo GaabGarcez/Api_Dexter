@@ -7,7 +7,7 @@ app = FastAPI()
 
 connections = {}
 message_queues = {}
-response_futures = {}  # Dicionário para armazenar os futures das respostas
+response_futures = {}
 
 class Message(BaseModel):
     uuid_user: str
@@ -28,7 +28,7 @@ async def websocket_endpoint(websocket: WebSocket, uuid: str):
         if not message_queues[uuid].empty():
             message_id, message = await message_queues[uuid].get()
             response_futures[message_id] = asyncio.Future()
-            asyncio.create_task(send_message(websocket, message, message_id))
+            await send_message(websocket, message, message_id)
         else:
             await asyncio.sleep(0.1)
 
@@ -37,12 +37,10 @@ async def read_webhook(message: Message):
     target_uuid = message.uuid_user
     unique_message_id = str(uuid.uuid4())
     if target_uuid in connections:
-        try:
-            await message_queues[target_uuid].put((unique_message_id, message.mensagem))
-            response_future = response_futures[unique_message_id] = asyncio.Future()
-            response = await response_future
-            return {"response": response}
-        except Exception as e:
-            return {"response": f"Erro ao processar a mensagem: {e}"}
+        await message_queues[target_uuid].put((unique_message_id, message.mensagem))
+        response_future = response_futures[unique_message_id] = asyncio.Future()
+        await asyncio.sleep(0.1)  # Dá tempo para a mensagem ser enviada antes de aguardar a resposta
+        response = await response_future
+        return {"response": response}
     else:
         return {"response": "UUID não encontrado ou conexão não estabelecida"}
