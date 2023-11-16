@@ -2,6 +2,7 @@ from fastapi import FastAPI, WebSocket
 from pydantic import BaseModel
 import asyncio
 from collections import defaultdict
+import uuid  # Certifique-se de que uuid está importado na parte superior do seu script
 
 app = FastAPI()
 
@@ -41,11 +42,11 @@ async def websocket_endpoint(websocket: WebSocket, uuid: str):
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
-    uuid = message.uuid_user
-    if uuid in connections:
+    uuid_str = message.uuid_user
+    if uuid_str in connections:
         try:
-            message_id = str(uuid.uuid4())
-            await message_queues[uuid].put((message_id, message.mensagem))
+            message_id = str(uuid.uuid4())  # Corrigido aqui
+            await message_queues[uuid_str].put((message_id, message.mensagem))
             response_future = response_futures[message_id] = asyncio.Future()
             return {"response": await asyncio.wait_for(response_future, timeout=30)}
         except asyncio.TimeoutError:
