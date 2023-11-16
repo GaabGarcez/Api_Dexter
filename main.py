@@ -1,57 +1,50 @@
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 import asyncio
-from collections import defaultdict
-import uuid  # Certifique-se de que uuid está importado na parte superior do seu script
 
 app = FastAPI()
 
 connections = {}
-message_queues = defaultdict(asyncio.Queue)
-response_futures = {}  # Usando Futures para gerenciar respostas
+response_futures = {}  # Para gerenciar as respostas
 
 class Message(BaseModel):
     uuid_user: str
     mensagem: str
 
-async def handle_websocket_messages(websocket: WebSocket, uuid: str):
-    while True:
-        try:
-            if not message_queues[uuid].empty():
-                message_id, message = await message_queues[uuid].get()
-                await websocket.send_text(message)
-                response_futures[message_id] = asyncio.Future()
-                # Aguarda a resposta e armazena no Future correspondente
-            else:
-                await asyncio.sleep(0.1)
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            print(f"Erro com WebSocket {uuid}: {e}")
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections = {}
+
+    async def connect(self, websocket: WebSocket, uuid: str):
+        await websocket.accept()
+        self.active_connections[uuid] = websocket
+
+    def disconnect(self, uuid: str):
+        if uuid in self.active_connections:
+            del self.active_connections[uuid]
+
+    async def send_message(self, uuid: str, message: str):
+        if uuid in self.active_connections:
+            websocket = self.active_connections[uuid]
+            await websocket.send_text(message)
+            return await websocket.receive_text()  # Aguardar a resposta
+
+manager = ConnectionManager()
 
 @app.websocket("/connect/{uuid}")
 async def websocket_endpoint(websocket: WebSocket, uuid: str):
-    await websocket.accept()
-    connections[uuid] = websocket
+    await manager.connect(websocket, uuid)
     try:
-        await handle_websocket_messages(websocket, uuid)
-    except Exception as e:
-        print(f"Erro ao lidar com WebSocket {uuid}: {e}")
-    finally:
-        del connections[uuid]
+        while True:
+            await asyncio.sleep(1)  # Mantém a conexão ativa
+    except WebSocketDisconnect:
+        manager.disconnect(uuid)
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
-    uuid_str = message.uuid_user
-    if uuid_str in connections:
-        try:
-            message_id = str(uuid.uuid4())  # Corrigido aqui
-            await message_queues[uuid_str].put((message_id, message.mensagem))
-            response_future = response_futures[message_id] = asyncio.Future()
-            return {"response": await asyncio.wait_for(response_future, timeout=30)}
-        except asyncio.TimeoutError:
-            return {"response": "Timeout esperando resposta do servidor local."}
-        except Exception as e:
-            return {"response": f"Erro ao processar a mensagem: {e}"}
-    else:
-        return {"response": "UUID não encontrado ou conexão não estabelecida"}
+    uuid = message.uuid_user
+    try:
+        response = await manager.send_message(uuid, message.mensagem)
+        return {"response": response}  # Retorna a resposta do WebSocket local
+    except Exception as e:
+        return {"response": f"Erro ao enviar mensagem: {e}"}
