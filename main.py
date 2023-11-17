@@ -6,24 +6,43 @@ import uuid
 app = FastAPI()
 
 connections = {}
+message_queues = {}
 responses = {}
 
 class Message(BaseModel):
     uuid_user: str
     mensagem: str
 
+async def process_message(websocket: WebSocket, uuid: str):
+    while True:
+        if not message_queues[uuid].empty():
+            message_id, message = await message_queues[uuid].get()
+            await websocket.send_text(message)
+            response = await websocket.receive_text()
+            responses[message_id] = response  # Associa a resposta ao identificador da mensagem
+        else:
+            await asyncio.sleep(0.1)
+
 @app.websocket("/connect/{uuid}")
 async def websocket_endpoint(websocket: WebSocket, uuid: str):
     await websocket.accept()
     connections[uuid] = websocket
+    try:
+        if uuid in message_queues:
+            await process_message(websocket, uuid)
+    finally:
+        await websocket.close()
+        del connections[uuid]  # Limpar a conexão após fechar
+
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
     target_uuid = message.uuid_user
+    message_id = str(uuid.uuid4())  # Identificador único para a mensagem
     if target_uuid in connections:
-        message_id = str(uuid.uuid4())
-        await connections[target_uuid].send_text(message.mensagem)
-        response = await connections[target_uuid].receive_text()
-        return {"response": response}
+        await message_queues[target_uuid].put((message_id, message.mensagem))
+        while message_id not in responses:
+            await asyncio.sleep(0.1)
+        return {"response": responses.pop(message_id)}  # Retorna a resposta associada ao identificador
     else:
-        return {"response": "O Dexter não está sendo executado no seu servidor."}
+        return {"response": "UUID não encontrado ou conexão não estabelecida"}
