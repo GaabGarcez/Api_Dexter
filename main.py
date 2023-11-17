@@ -20,8 +20,8 @@ async def websocket_endpoint(websocket: WebSocket, uuid: str):
 @app.post("/webhook/")
 async def read_webhook(message: Message):
     target_uuid = message.uuid_user
-    message_id = str(uuid.uuid4())
     if target_uuid in connections:
+        message_id = str(uuid.uuid4())
         await connections[target_uuid].send_text(message.mensagem)
         response = await connections[target_uuid].receive_text()
         return {"response": response}
