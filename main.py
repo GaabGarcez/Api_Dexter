@@ -8,44 +8,37 @@ app = FastAPI()
 connections = {}
 message_queues = {}
 responses = {}
-response_events = {}
 
 class Message(BaseModel):
     uuid_user: str
     mensagem: str
 
-async def process_message(uuid: str):
+async def process_message(websocket: WebSocket, uuid: str):
     while True:
-        if uuid in message_queues and not message_queues[uuid].empty():
+        if not message_queues[uuid].empty():
             message_id, message = await message_queues[uuid].get()
-            if uuid in connections:
-                websocket = connections[uuid]
-                await websocket.send_text(message)
-                response = await websocket.receive_text()
-                responses[message_id] = response
-                response_events[message_id].set()
-            else:
-                print("WebSocket não conectado para UUID:", uuid)
-        await asyncio.sleep(0.1)
+            await websocket.send_text(f"{message_id}:{message}")  # Envio de message_id com a mensagem
+            response = await websocket.receive_text()
+            responses[message_id] = response  # Associa a resposta ao identificador da mensagem
+        else:
+            await asyncio.sleep(0.1)
 
 @app.websocket("/connect/{uuid}")
 async def websocket_endpoint(websocket: WebSocket, uuid: str):
-    connections[uuid] = websocket
     await websocket.accept()
+    connections[uuid] = websocket
     if uuid not in message_queues:
         message_queues[uuid] = asyncio.Queue()
-    await process_message(uuid)
+    await process_message(websocket, uuid)
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
     target_uuid = message.uuid_user
-    message_id = str(uuid.uuid4())
-    response_events[message_id] = asyncio.Event()
+    message_id = str(uuid.uuid4())  # Identificador único para a mensagem
     if target_uuid in connections:
         await message_queues[target_uuid].put((message_id, message.mensagem))
-        await asyncio.wait_for(response_events[message_id].wait(), timeout=10)
-        return {"response": responses.pop(message_id)}
+        while message_id not in responses:
+            await asyncio.sleep(0.1)
+        return {"response": responses.pop(message_id)}  # Retorna a resposta associada ao identificador
     else:
         return {"response": "UUID não encontrado ou conexão não estabelecida"}
-
-# Outras rotas e lógicas conforme necessário
