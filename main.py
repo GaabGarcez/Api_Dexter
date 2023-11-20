@@ -39,6 +39,8 @@ async def read_webhook(message: Message):
         await message_queues[target_uuid].put((message_id, message.mensagem))
         while message_id not in responses:
             await asyncio.sleep(0.1)
-        return {"response": responses.pop(message_id)}  # Retorna a resposta associada ao identificador
+        response = responses.pop(message_id)
+        response_content = response.split(":", 1)[1] if ":" in response else response  # Extrair apenas o conteúdo da resposta
+        return {"response": response_content}
     else:
         return {"response": "UUID não encontrado ou conexão não estabelecida"}
