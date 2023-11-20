@@ -2,6 +2,7 @@ from fastapi import FastAPI, WebSocket
 from pydantic import BaseModel
 import asyncio
 import uuid
+import websockets
 
 app = FastAPI()
 
@@ -29,7 +30,14 @@ async def websocket_endpoint(websocket: WebSocket, uuid: str):
     connections[uuid] = websocket
     if uuid not in message_queues:
         message_queues[uuid] = asyncio.Queue()
-    await process_message(websocket, uuid)
+
+    try:
+        await process_message(websocket, uuid)
+    except websockets.exceptions.ConnectionClosedOK:
+        # Remover a conexão do dicionário quando ela é fechada
+        connections.pop(uuid, None)
+        # Adicionalmente, pode-se lidar com a fila de mensagens pendentes aqui
+
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
