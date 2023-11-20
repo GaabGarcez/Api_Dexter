@@ -2,6 +2,7 @@ from fastapi import FastAPI, WebSocket
 from pydantic import BaseModel
 import asyncio
 import uuid
+import starlette
 import websockets
 
 app = FastAPI()
@@ -36,7 +37,10 @@ async def websocket_endpoint(websocket: WebSocket, uuid: str):
     except websockets.exceptions.ConnectionClosedOK:
         # Remover a conexão do dicionário quando ela é fechada
         connections.pop(uuid, None)
-        # Adicionalmente, pode-se lidar com a fila de mensagens pendentes aqui
+    except starlette.websockets.WebSocketDisconnect as e:
+        # Lidar com desconexão WebSocket
+        print(f"WebSocket Disconnect Error: {e}")
+        connections.pop(uuid, None)
 
 
 @app.post("/webhook/")
