@@ -53,3 +53,4 @@ async def read_webhook(message: Message):
         return {"response": responses.pop(message_id)}
     else:
         return {"response": "O Dexter não está sendo executado no seu servidor."}
+
