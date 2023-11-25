@@ -12,7 +12,6 @@ responses = {}
 class Message(BaseModel):
     uuid_user: str
     mensagem: str
-    message_id: str  # Identificador único para cada mensagem
 
 async def handle_websocket_messages(websocket: WebSocket, uuid_user: str):
     while True:
@@ -40,7 +39,7 @@ async def websocket_endpoint(websocket: WebSocket, uuid_user: str):
 @app.post("/webhook/")
 async def read_webhook(message: Message):
     uuid_user = message.uuid_user
-    message_id = str(uuid.uuid4())  # Gerar um identificador único para a mensagem
+    message_id = str(uuid.uuid4())  # Gerar um identificador único para cada mensagem
 
     if uuid_user in connections:
         if uuid_user not in message_queues:
@@ -53,4 +52,3 @@ async def read_webhook(message: Message):
         return {"response": responses.pop(message_id)}
     else:
         return {"response": "O Dexter não está sendo executado no seu servidor."}
-
