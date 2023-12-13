@@ -1,4 +1,3 @@
-from starlette.websockets import WebSocketState
 from fastapi import FastAPI, WebSocket
 from pydantic import BaseModel
 import asyncio
@@ -6,58 +5,64 @@ import logging
 import uuid
 
 app = FastAPI()
+logging.basicConfig(level=logging.DEBUG)
 
-# Configuração de Logging
-logging.basicConfig(level=logging.DEBUG)  # Alterado para DEBUG para mais detalhes
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections = {}
+        self.message_queues = {}
+        self.responses = {}
 
-connections = {}
-message_queues = {}
-responses = {}
+    async def connect(self, uuid_user: str, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections[uuid_user] = websocket
+        self.message_queues[uuid_user] = asyncio.Queue()
+        logging.info(f"Usuário {uuid_user} conectado.")
+
+    async def disconnect(self, uuid_user: str):
+        if uuid_user in self.active_connections:
+            await self.active_connections[uuid_user].close()
+            del self.active_connections[uuid_user]
+            del self.message_queues[uuid_user]
+            logging.info(f"Usuário {uuid_user} desconectado.")
+
+    async def send_message(self, uuid_user: str, message: str, message_id: str):
+        if uuid_user in self.active_connections:
+            await self.message_queues[uuid_user].put({"mensagem": message, "message_id": message_id})
+            while message_id not in self.responses:
+                await asyncio.sleep(0.1)
+            return self.responses.pop(message_id)
+        else:
+            return None
+
+    def store_response(self, uuid_user: str, message_id: str, response: str):
+        self.responses[message_id] = response
+
+manager = ConnectionManager()
 
 class Message(BaseModel):
     uuid_user: str
     mensagem: str
 
-async def handle_websocket_messages(websocket: WebSocket, uuid_user: str):
+@app.websocket("/connect/{uuid_user}")
+async def websocket_endpoint(websocket: WebSocket, uuid_user: str):
+    await manager.connect(uuid_user, websocket)
     try:
         while True:
-            if uuid_user in message_queues and not message_queues[uuid_user].empty():
-                message_info = await message_queues[uuid_user].get()
-                await websocket.send_text(message_info['mensagem'])
-                response_message = await websocket.receive_text()
-                responses[message_info['message_id']] = response_message
-            else:
-                # Verifica se a conexão ainda está aberta
-                if not websocket.client_state == WebSocketState.CONNECTED:
-                    break
-                await asyncio.sleep(0.1)
+            data = await websocket.receive_text()
+            await manager.store_response(uuid_user, data)
     except Exception as e:
         logging.error(f"Erro na comunicação com o usuário {uuid_user}: {e}")
     finally:
-        # Remove referências do usuário desconectado
-        connections.pop(uuid_user, None)
-        message_queues.pop(uuid_user, None)
-        responses.pop(uuid_user, None)
-        logging.info(f"Usuário {uuid_user} desconectado.")
-
-@app.websocket("/connect/{uuid_user}")
-async def websocket_endpoint(websocket: WebSocket, uuid_user: str):
-    await websocket.accept()
-    connections[uuid_user] = websocket
-    message_queues[uuid_user] = asyncio.Queue()
-    logging.info(f"Usuário {uuid_user} conectado.")
-    await handle_websocket_messages(websocket, uuid_user)
+        await manager.disconnect(uuid_user)
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
     uuid_user = message.uuid_user
     message_id = str(uuid.uuid4())
-
-    if uuid_user in connections:
-        await message_queues[uuid_user].put({"mensagem": message.mensagem, "message_id": message_id})
-        while message_id not in responses:
-            await asyncio.sleep(0.1)
-        return {"response": responses.pop(message_id)}
+    response = await manager.send_message(uuid_user, message.mensagem, message_id)
+    if response:
+        return {"response": response}
     else:
         logging.warning(f"Tentativa de enviar mensagem para usuário {uuid_user}, mas não está conectado.")
         return {"response": "O Dexter não está sendo executado no seu servidor."}
