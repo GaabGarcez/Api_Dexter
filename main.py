@@ -43,11 +43,15 @@ async def websocket_endpoint(websocket: WebSocket, uuid_user: str):
     except Exception as e:
         logging.error(f"Erro na conexão WebSocket com usuário {uuid_user}: {e}")
     finally:
+        # Limpeza aprimorada na desconexão
         if uuid_user in connections:
             del connections[uuid_user]
-            logging.info(f"Usuário {uuid_user} desconectado.")
         if uuid_user in message_queues:
             del message_queues[uuid_user]
+        if uuid_user in responses:
+            del responses[uuid_user]
+        logging.info(f"Usuário {uuid_user} desconectado.")
+
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
