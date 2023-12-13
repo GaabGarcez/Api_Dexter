@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket
 from fastapi import WebSocketDisconnect
+from websockets.exceptions import ConnectionClosedOK
 from pydantic import BaseModel
 import asyncio
 import logging
@@ -33,12 +34,12 @@ class ConnectionManager:
         if websocket:
             try:
                 await websocket.send_text(message)
-            except WebSocketDisconnect:
+                return True
+            except (WebSocketDisconnect, ConnectionClosedOK):
                 # Desconecte o usuário aqui, se necessário
                 await self.disconnect(uuid_user)
                 logging.info(f"Conexão com o usuário {uuid_user} perdida.")
                 return False
-        return True
 
     async def receive_personal_message(self, uuid_user: str):
         if uuid_user in self.active_connections:
