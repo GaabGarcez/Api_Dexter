@@ -36,6 +36,9 @@ class ConnectionManager:
             response_message = await self.active_connections[uuid_user].receive_text()
             self.responses[uuid_user] = response_message
             return response_message
+    async def is_connected(self, uuid_user: str):
+        websocket = self.active_connections.get(uuid_user)
+        return websocket and not websocket.closed
 
 manager = ConnectionManager()
 
@@ -65,11 +68,11 @@ async def read_webhook(message: Message):
     uuid_user = message.uuid_user
     message_id = str(uuid.uuid4())
 
-    if uuid_user in manager.active_connections:
+    if await manager.is_connected(uuid_user):
         await manager.message_queues[uuid_user].put({"mensagem": message.mensagem, "message_id": message_id})
         while message_id not in manager.responses:
             await asyncio.sleep(0.1)
         return {"response": manager.responses.pop(message_id)}
     else:
-        logging.warning(f"Tentativa de enviar mensagem para usuário {uuid_user}, mas não está conectado.")
+        logging.warning(f"Tentativa de enviar mensagem para usuário {uuid_user}, mas o Dexter está desligado.")
         return {"response": "O Dexter não está sendo executado no seu servidor."}
