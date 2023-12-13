@@ -1,3 +1,4 @@
+from starlette.websockets import WebSocketState
 from fastapi import FastAPI, WebSocket
 from pydantic import BaseModel
 import asyncio
@@ -26,12 +27,17 @@ async def handle_websocket_messages(websocket: WebSocket, uuid_user: str):
                 response_message = await websocket.receive_text()
                 responses[message_info['message_id']] = response_message
             else:
+                # Verifica se a conexão ainda está aberta
+                if not websocket.client_state == WebSocketState.CONNECTED:
+                    break
                 await asyncio.sleep(0.1)
     except Exception as e:
         logging.error(f"Erro na comunicação com o usuário {uuid_user}: {e}")
     finally:
+        # Remove referências do usuário desconectado
         connections.pop(uuid_user, None)
         message_queues.pop(uuid_user, None)
+        responses.pop(uuid_user, None)
         logging.info(f"Usuário {uuid_user} desconectado.")
 
 @app.websocket("/connect/{uuid_user}")
