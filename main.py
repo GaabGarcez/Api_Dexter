@@ -1,4 +1,5 @@
 from fastapi import FastAPI, WebSocket, HTTPException
+from starlette.websockets import WebSocketDisconnect
 from pydantic import BaseModel
 import asyncio
 import logging
@@ -14,12 +15,20 @@ responses = {}
 class Message(BaseModel):
     uuid_user: str
     mensagem: str
-
+    
 async def handle_websocket_messages(websocket: WebSocket, uuid_user: str):
     while True:
         try:
             if uuid_user in message_queues and not message_queues[uuid_user].empty():
                 message_info = await message_queues[uuid_user].get()
+                # Verificação periódica da conexão
+                try:
+                    await asyncio.wait_for(websocket.receive_text(), 0.0001)
+                except asyncio.TimeoutError:
+                    pass  # Continua se não houver mensagem, mas a conexão está aberta
+                except WebSocketDisconnect:
+                    break  # Sai do loop se a conexão WebSocket for fechada
+
                 await websocket.send_text(message_info['mensagem'])
                 response_message = await websocket.receive_text()
                 responses[message_info['message_id']] = response_message
@@ -27,7 +36,8 @@ async def handle_websocket_messages(websocket: WebSocket, uuid_user: str):
                 await asyncio.sleep(0.1)
         except Exception as e:
             logging.error(f"Erro na comunicação com o usuário {uuid_user}: {e}")
-            break  # Sair do loop em caso de erro
+            break
+
 
 @app.websocket("/connect/{uuid_user}")
 async def websocket_endpoint(websocket: WebSocket, uuid_user: str):
