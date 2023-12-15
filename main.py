@@ -25,20 +25,13 @@ async def handle_websocket_messages(websocket: WebSocket, uuid_user: str):
                 response_message = await websocket.receive_text()
                 responses[message_info['message_id']] = response_message
             else:
-                # Aguarda por mensagens (ping) e responde com pong
-                try:
-                    message = await asyncio.wait_for(websocket.receive_text(), timeout=30)  # Aguarda por 30 segundos por uma mensagem
-                    if message == "ping":
-                        await websocket.send_text("pong")
-                except asyncio.TimeoutError:
-                    pass  # Continua se não houver mensagem
-                except WebSocketDisconnect:
-                    break  # Sai do loop se a conexão WebSocket for fechada
+                await asyncio.sleep(0.1)  # Aguarda para evitar uso excessivo da CPU
+        except WebSocketDisconnect:
+            logging.info(f"Conexão WebSocket com o usuário {uuid_user} foi fechada.")
+            break  # Sai do loop se a conexão WebSocket for fechada
         except Exception as e:
             logging.error(f"Erro na comunicação com o usuário {uuid_user}: {e}")
             break
-
-        await asyncio.sleep(0.1)  # Pequena pausa para evitar sobrecarga do loop
 
 @app.websocket("/connect/{uuid_user}")
 async def websocket_endpoint(websocket: WebSocket, uuid_user: str):
