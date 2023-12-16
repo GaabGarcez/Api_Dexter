@@ -74,3 +74,14 @@ async def disconnect_client(uuid_user: str):
         return {"status": "Disconnected"}
     else:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+@app.websocket("/healthcheck/{uuid_user}")
+async def websocket_healthcheck(websocket: WebSocket, uuid_user: str):
+    await websocket.accept()
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        logging.info(f"WebSocket desconectado: {uuid_user}")
