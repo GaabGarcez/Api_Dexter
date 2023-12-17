@@ -1,53 +1,20 @@
-from fastapi import FastAPI, WebSocket, HTTPException
-from starlette.websockets import WebSocketDisconnect
+from fastapi import FastAPI
+from fastapi_socketio import SocketManager
 from pydantic import BaseModel
 import asyncio
 import logging
 import uuid
 
 app = FastAPI()
-logging.basicConfig(level=logging.DEBUG)  # DEBUG para mais detalhes
+sio = SocketManager(app=app)
+logging.basicConfig(level=logging.DEBUG)
 
-connections = {}
-message_queues = {}
-responses = {}
+connections = {}  # Mapeia UUIDs de usuários para SIDs do Socket.IO
+pending_responses = {}  # Mapeia message_ids para futuros de resposta
 
 class Message(BaseModel):
     uuid_user: str
     mensagem: str
-    
-async def handle_websocket_messages(websocket: WebSocket, uuid_user: str):
-    while True:
-        try:
-            if uuid_user in message_queues and not message_queues[uuid_user].empty():
-                message_info = await message_queues[uuid_user].get()
-                if message_info['mensagem'] == "ping":
-                    await websocket.send_text("pong")  # Responde diretamente com pong
-                else:
-                    await websocket.send_text(message_info['mensagem'])  # Envio normal
-                    response_message = await websocket.receive_text()  # Recebe resposta normal
-                    responses[message_info['message_id']] = response_message
-            else:
-                await asyncio.sleep(0.1)  # Aguarda para evitar uso excessivo da CPU
-        except WebSocketDisconnect:
-            logging.info(f"Conexão WebSocket com o usuário {uuid_user} foi fechada.")
-            break  # Sai do loop se a conexão WebSocket for fechada
-        except Exception as e:
-            logging.error(f"Erro na comunicação com o usuário {uuid_user}: {e}")
-            break
-
-@app.websocket("/connect/{uuid_user}")
-async def websocket_endpoint(websocket: WebSocket, uuid_user: str):
-    await websocket.accept()
-    connections[uuid_user] = websocket
-    message_queues[uuid_user] = asyncio.Queue()
-    try:
-        await handle_websocket_messages(websocket, uuid_user)
-    except Exception as e:
-        logging.error(f"Erro na conexão WebSocket com usuário {uuid_user}: {e}")
-    finally:
-        del connections[uuid_user]
-        del message_queues[uuid_user]
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
@@ -55,25 +22,21 @@ async def read_webhook(message: Message):
     message_id = str(uuid.uuid4())
 
     if uuid_user in connections:
-        if uuid_user not in message_queues:
-            message_queues[uuid_user] = asyncio.Queue()
-        await message_queues[uuid_user].put({"mensagem": message.mensagem, "message_id": message_id})
-        
-        # Aguardar a resposta
-        while message_id not in responses:
-            await asyncio.sleep(0.1)
-        return {"response": responses.pop(message_id)}
-    else:
-        return {"response": "O Dexter não está sendo executado no seu servidor."}
+        response_future = asyncio.get_event_loop().create_future()
+        pending_responses[message_id] = response_future
+        await sio.emit('message_event', {"mensagem": message.mensagem, "message_id": message_id}, to=connections[uuid_user])
 
-@app.post("/disconnect/{uuid_user}")
-async def disconnect_client(uuid_user: str):
-    if uuid_user in connections:
-        await connections[uuid_user].close()
-        connections.pop(uuid_user, None)
-        message_queues.pop(uuid_user, None)
-        responses.pop(uuid_user, None)
-        logging.info(f"Usuário {uuid_user} desconectado.")
-        return {"status": "Disconnected"}
+        try:
+            response = await asyncio.wait_for(response_future, timeout=30)  # Aguarda a resposta por 30 segundos
+            return {"response": response}
+        except asyncio.TimeoutError:
+            return {"response": "Timeout na espera pela resposta."}
     else:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+        return {"response": "Usuário não conectado ou não encontrado."}
+
+@sio.on('message_response')
+async def handle_message_response(sid, data):
+    message_id = data['message_id']
+    if message_id in pending_responses:
+        pending_responses[message_id].set_result(data['resposta'])
+        del pending_responses[message_id]
