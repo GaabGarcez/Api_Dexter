@@ -29,6 +29,3 @@ async def registrar_id(sid, data):
 async def get_connected_clients(request: Request):
     return connections
 
-if __name__ == '__main__':
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
