@@ -21,9 +21,12 @@ async def handle_websocket_messages(websocket: WebSocket, uuid_user: str):
         try:
             if uuid_user in message_queues and not message_queues[uuid_user].empty():
                 message_info = await message_queues[uuid_user].get()
-                await websocket.send_text(message_info['mensagem'])
-                response_message = await websocket.receive_text()
-                responses[message_info['message_id']] = response_message
+                if message_info['mensagem'] == "ping":
+                    await websocket.send_text("pong")  # Responde diretamente com pong
+                else:
+                    await websocket.send_text(message_info['mensagem'])  # Envio normal
+                    response_message = await websocket.receive_text()  # Recebe resposta normal
+                    responses[message_info['message_id']] = response_message
             else:
                 await asyncio.sleep(0.1)  # Aguarda para evitar uso excessivo da CPU
         except WebSocketDisconnect:
@@ -74,14 +77,3 @@ async def disconnect_client(uuid_user: str):
         return {"status": "Disconnected"}
     else:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
-    
-@app.websocket("/healthcheck/{uuid_user}")
-async def websocket_healthcheck(websocket: WebSocket, uuid_user: str):
-    await websocket.accept()
-    try:
-        while True:
-            data = await websocket.receive_text()
-            if data == "ping":
-                await websocket.send_text("pong")
-    except WebSocketDisconnect:
-        logging.info(f"WebSocket desconectado: {uuid_user}")
