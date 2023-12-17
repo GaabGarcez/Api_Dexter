@@ -34,9 +34,16 @@ async def print_connection_details():
             logging.info(f"Usuário: {uuid_user}, Estado: {client_state}, Endereço: {client_host}:{client_port}")
 
         await asyncio.sleep(120)  # Espera por 2 minuto
-        
+
 async def handle_websocket_messages(websocket: WebSocket, uuid_user: str):
     while True:
+        if websocket.application_state == "disconnected":
+            # Trata mensagens pendentes
+            if uuid_user in message_queues:
+                while not message_queues[uuid_user].empty():
+                    message_info = await message_queues[uuid_user].get()
+                    responses[message_info['message_id']] = "O Dexter não está sendo executado no seu servidor."
+            break
         try:
             if uuid_user in message_queues and not message_queues[uuid_user].empty():
                 message_info = await message_queues[uuid_user].get()
@@ -70,7 +77,7 @@ async def read_webhook(message: Message):
     uuid_user = message.uuid_user
     message_id = str(uuid.uuid4())
 
-    if uuid_user in connections:
+    if uuid_user in connections and connections[uuid_user].application_state != "disconnected":
         if uuid_user not in message_queues:
             message_queues[uuid_user] = asyncio.Queue()
         await message_queues[uuid_user].put({"mensagem": message.mensagem, "message_id": message_id})
