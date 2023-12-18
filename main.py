@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import asyncio
 import logging
 import uuid
+import time
 
 app = FastAPI()
 logging.basicConfig(level=logging.DEBUG)  # DEBUG para mais detalhes
@@ -11,6 +12,7 @@ logging.basicConfig(level=logging.DEBUG)  # DEBUG para mais detalhes
 connections = {}
 message_queues = {}
 responses = {}
+last_ping = {}
 
 class Message(BaseModel):
     uuid_user: str
@@ -19,6 +21,16 @@ class Message(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(print_connection_details())
+    asyncio.create_task(send_ping())
+
+async def send_ping():
+    while True:
+        current_time = time.time()
+        for uuid_user, queue in message_queues.items():
+            if current_time - last_ping.get(uuid_user, 0) > 20:  # Ping a cada 20 segundos
+                await queue.put("ping")
+                last_ping[uuid_user] = current_time
+        await asyncio.sleep(5)  # Intervalo de verificação
 
 async def print_connection_details():
     while True:
@@ -37,23 +49,17 @@ async def print_connection_details():
 
 async def handle_websocket_messages(websocket: WebSocket, uuid_user: str):
     while True:
-        # Verificar estado da conexão
-        if websocket.application_state == "disconnected" or websocket.client_state == "disconnected":
-            # Trata mensagens pendentes
-            if uuid_user in message_queues:
-                while not message_queues[uuid_user].empty():
-                    message_info = await message_queues[uuid_user].get()
-                    responses[message_info['message_id']] = "O Dexter não está sendo executado no seu servidor."
-            break
-
         try:
             if uuid_user in message_queues and not message_queues[uuid_user].empty():
                 message_info = await message_queues[uuid_user].get()
-                # Log antes de enviar
-                logging.info(f"Tentando enviar mensagem para {uuid_user}, estado da conexão: {websocket.client_state}")
-                await websocket.send_text(message_info['mensagem'])
-                response_message = await websocket.receive_text()
-                responses[message_info['message_id']] = response_message
+                if message_info == "ping":
+                    await websocket.send_text("ping")  # Envio prioritário de ping
+                else:
+                    # Processamento normal de mensagens
+                    logging.info(f"Tentando enviar mensagem para {uuid_user}, estado da conexão: {websocket.client_state}")
+                    await websocket.send_text(message_info['mensagem'])
+                    response_message = await websocket.receive_text()
+                    responses[message_info['message_id']] = response_message
             else:
                 await asyncio.sleep(0.1)
         except WebSocketDisconnect:
@@ -62,7 +68,7 @@ async def handle_websocket_messages(websocket: WebSocket, uuid_user: str):
         except Exception as e:
             logging.error(f"Erro ao enviar mensagem para {uuid_user}: {e}")
             break
-        
+
 @app.websocket("/connect/{uuid_user}")
 async def websocket_endpoint(websocket: WebSocket, uuid_user: str):
     await websocket.accept()
