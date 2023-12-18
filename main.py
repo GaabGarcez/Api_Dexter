@@ -22,7 +22,8 @@ class MeuServidorFactory(WebSocketServerFactory):
 
     def register(self, client, client_id):
         self.clients[client_id] = client
-        logging.info(f"Cliente {client_id} registrado.")
+        logging.info(f"Cliente registrado: ID = {client_id}, Total de clientes = {len(self.clients)}")
+
 
     def unregister(self, client_id):
         if client_id in self.clients:
@@ -71,13 +72,6 @@ def start_websocket_server():
     factory = MeuServidorFactory(endereco_servidor)
     factory.protocol = MeuServidorProtocolo
     reactor.listenTCP(9000, factory)
-
-# Endpoint para enviar mensagens para clientes WebSocket
-@app.post("/enviar_para_cliente/{id_cliente}")
-async def enviar_para_cliente(id_cliente: str, mensagem: dict):
-    factory.encaminhar_mensagem_para_cliente(id_cliente, mensagem)
-    return {"status": "Mensagem enviada"}
-
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
