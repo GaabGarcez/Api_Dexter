@@ -7,9 +7,10 @@ import logging
 from pydantic import BaseModel
 import asyncio
 import logging
-import uuid
+import os
 
 app = FastAPI()
+
 class Message(BaseModel):
     uuid_user: str
     mensagem: str
@@ -67,11 +68,13 @@ class MeuServidorProtocolo(WebSocketServerProtocol):
 @app.on_event("startup")
 def start_websocket_server():
     logging.basicConfig(level=logging.INFO)
-    endereco_servidor = "ws://0.0.0.0:9000"
+    endereco_servidor = "ws://0.0.0.0"  # Porta removida
     global factory
     factory = MeuServidorFactory(endereco_servidor)
     factory.protocol = MeuServidorProtocolo
-    reactor.listenTCP(9000, factory)
+    # Usar a porta fornecida pelo Render
+    port = int(os.environ.get("PORT", 80))
+    reactor.listenTCP(port, factory)
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
