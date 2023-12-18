@@ -37,28 +37,32 @@ async def print_connection_details():
 
 async def handle_websocket_messages(websocket: WebSocket, uuid_user: str):
     while True:
-        if websocket.application_state == "disconnected":
+        # Verificar estado da conexão
+        if websocket.application_state == "disconnected" or websocket.client_state == "disconnected":
             # Trata mensagens pendentes
             if uuid_user in message_queues:
                 while not message_queues[uuid_user].empty():
                     message_info = await message_queues[uuid_user].get()
                     responses[message_info['message_id']] = "O Dexter não está sendo executado no seu servidor."
             break
+
         try:
             if uuid_user in message_queues and not message_queues[uuid_user].empty():
                 message_info = await message_queues[uuid_user].get()
+                # Log antes de enviar
+                logging.info(f"Tentando enviar mensagem para {uuid_user}, estado da conexão: {websocket.client_state}")
                 await websocket.send_text(message_info['mensagem'])
                 response_message = await websocket.receive_text()
                 responses[message_info['message_id']] = response_message
             else:
-                await asyncio.sleep(0.1)  # Aguarda para evitar uso excessivo da CPU
+                await asyncio.sleep(0.1)
         except WebSocketDisconnect:
-            logging.info(f"Conexão WebSocket com o usuário {uuid_user} foi fechada.")
-            break  # Sai do loop se a conexão WebSocket for fechada
-        except Exception as e:
-            logging.error(f"Erro na comunicação com o usuário {uuid_user}: {e}")
+            logging.info(f"WebSocketDisconnect: Conexão com {uuid_user} foi fechada.")
             break
-
+        except Exception as e:
+            logging.error(f"Erro ao enviar mensagem para {uuid_user}: {e}")
+            break
+        
 @app.websocket("/connect/{uuid_user}")
 async def websocket_endpoint(websocket: WebSocket, uuid_user: str):
     await websocket.accept()
