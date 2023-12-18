@@ -5,9 +5,8 @@ from twisted.internet import reactor
 import json
 import logging
 from pydantic import BaseModel
-import asyncio
 import logging
-import uuid
+import os
 
 app = FastAPI()
 class Message(BaseModel):
@@ -67,11 +66,12 @@ class MeuServidorProtocolo(WebSocketServerProtocol):
 @app.on_event("startup")
 def start_websocket_server():
     logging.basicConfig(level=logging.INFO)
-    endereco_servidor = "wss://api-dexter.onrender.com"
     global factory
-    factory = MeuServidorFactory(endereco_servidor)
+    factory = MeuServidorFactory()  # Endereço removido
     factory.protocol = MeuServidorProtocolo
-    reactor.listenTCP(9000, factory)
+    port = int(os.environ.get("PORT", 80))
+    reactor.listenTCP(port, factory)
+
 
 @app.post("/webhook/")
 async def read_webhook(message: Message):
