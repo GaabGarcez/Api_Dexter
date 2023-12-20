@@ -18,13 +18,21 @@ async def make_request(data: RequestData):
     response = requests.post(f"{ngrok_url}/webhook/", json={"mensagem": data.mensagem})
     return response.json()
 
+class ConnectData(BaseModel):
+    uuid_user: str
+    ngrok_url: str
+
 @app.post("/connect/")
-async def connect(uuid_user: str, ngrok_url: str):
-    connections[uuid_user] = ngrok_url
-    print(f"Conectado: {uuid_user}, URL: {ngrok_url}")
+async def connect(data: ConnectData):
+    connections[data.uuid_user] = data.ngrok_url
+    print(f"Conectado: {data.uuid_user}, URL: {data.ngrok_url}")
+
+class DisconnectData(BaseModel):
+    uuid_user: str
 
 @app.post("/disconnect/")
-async def disconnect(uuid_user: str):
-    if uuid_user in connections:
-        print(f"Desconectado: {uuid_user}")
-        connections.pop(uuid_user)
+async def disconnect(data: DisconnectData):
+    if data.uuid_user in connections:
+        print(f"Desconectado: {data.uuid_user}")
+        connections.pop(data.uuid_user)
+
