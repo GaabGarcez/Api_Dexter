@@ -20,7 +20,7 @@ async def make_request(data: RequestData):
         return {"response": response.json()}
     except Exception as e:
         connections.pop(data.uuid_user, None)
-        return {"response": "O Dexter não está sendo executado no seu servidor."}
+        return {"response": {"resposta": "O Dexter não está sendo executado no seu servidor."}}
 
 class ConnectData(BaseModel):
     uuid_user: str
