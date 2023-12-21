@@ -17,11 +17,10 @@ async def make_request(data: RequestData):
     try:
         ngrok_url = connections[data.uuid_user]
         response = requests.post(f"{ngrok_url}/webhook/", json={"mensagem": data.mensagem})
-        return response.json()
+        return {"response": response.json()}
     except Exception as e:
-        # Remover a conexão inativa e notificar o usuário
         connections.pop(data.uuid_user, None)
-        return "Dexter não está em funcionamento neste servidor"
+        return {"response": "O Dexter não está sendo executado no seu servidor."}
 
 class ConnectData(BaseModel):
     uuid_user: str
