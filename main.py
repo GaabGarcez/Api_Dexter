@@ -12,7 +12,7 @@ class RequestData(BaseModel):
 @app.post("/request/")
 async def make_request(data: RequestData):
     if data.uuid_user not in connections:
-        return "Dexter não está em funcionamento neste servidor"
+        return {"response": {"resposta": "O Dexter não está sendo executado no seu servidor."}}
     
     try:
         ngrok_url = connections[data.uuid_user]
