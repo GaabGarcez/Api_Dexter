@@ -16,8 +16,8 @@ async def make_request(data: RequestData):
         return {"response": {"resposta": "O Dexter não está sendo executado no seu servidor."}}
     
     try:
-        ngrok_url = connections[data.uuid_user]
-        response = requests.post(f"{ngrok_url}/webhook/", json={"mensagem": data.mensagem})
+        url = connections[data.uuid_user]
+        response = requests.post(f"{url}/webhook/", json={"mensagem": data.mensagem})
         return {"response": response.json()}
     except Exception as e:
         connections.pop(data.uuid_user, None)
@@ -25,9 +25,9 @@ async def make_request(data: RequestData):
 
 class ConnectData(BaseModel):
     uuid_user: str
-    ngrok_url: str
+    url: str
 
 @app.post("/connect/")
 async def connect(data: ConnectData):
-    connections[data.uuid_user] = data.ngrok_url
-    print(f"Conectado: {data.uuid_user}, URL: {data.ngrok_url}")
+    connections[data.uuid_user] = data.url
+    print(f"Conectado: {data.uuid_user}, URL: {data.url}")
