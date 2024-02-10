@@ -8,7 +8,6 @@ connections = {}
 class RequestData(BaseModel):
     uuid_user: str
     mensagem: str
-    historico: str
 
 @app.post("/request/")
 async def make_request(data: RequestData):
